@@ -1,6 +1,13 @@
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 import re
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 maps_df = pd.read_csv("detailed_matches_maps.csv")
 player_stats_df = pd.read_csv("detailed_matches_player_stats.csv")
@@ -8,25 +15,25 @@ performance_df = pd.read_csv("performance_data.csv")
 economy_df = pd.read_csv("economy_data.csv")
 
 team_name_mapping = {
-    'PRX': 'Paper Rex',
-    'XLG': 'Xi Lai Gaming',
-    'GX': 'GIANTX',
-    'SEN': 'Sentinels',
-    'NRG': 'NRG',
-    'EDG': 'EDward Gaming',
-    'TL': 'Team Liquid',
-    'DRX': 'DRX',
-    'DRG': 'Dragon Ranger Gaming',
-    'T1': 'T1',
-    'G2': 'G2 Esports',
-    'TH': 'Team Heretics',
-    'BLG': 'Guangzhou Huadu Bilibili Gaming(Bilibili Gaming)',
-    'MIBR': 'MIBR',
-    'RRQ': 'Rex Regum Qeon',
-    'FNC': 'FNATIC'
+    "PRX": "Paper Rex",
+    "XLG": "Xi Lai Gaming",
+    "GX": "GIANTX",
+    "SEN": "Sentinels",
+    "NRG": "NRG",
+    "EDG": "EDward Gaming",
+    "TL": "Team Liquid",
+    "DRX": "DRX",
+    "DRG": "Dragon Ranger Gaming",
+    "T1": "T1",
+    "G2": "G2 Esports",
+    "TH": "Team Heretics",
+    "BLG": "Guangzhou Huadu Bilibili Gaming(Bilibili Gaming)",
+    "MIBR": "MIBR",
+    "RRQ": "Rex Regum Qeon",
+    "FNC": "FNATIC"
 }
-economy_df['Team'] = economy_df['Team'].map(team_name_mapping)
-performance_df['Team'] = performance_df['Team'].map(team_name_mapping)
+economy_df["Team"] = economy_df["Team"].map(team_name_mapping)
+performance_df["Team"] = performance_df["Team"].map(team_name_mapping)
 
 # Initial data exploration
 print(maps_df.info())
@@ -76,11 +83,11 @@ def calculate_team_stats_for_map(player_stats_df, match_id, map_name):
     })
     
     # calculate KDA ratio: (K + A) / D
-    team_stats["kda"] = np.where(
-        team_stats["d"] != 0,
-        (team_stats["k"] + team_stats["a"])/team_stats["d"],
-        team_stats["k"] + team_stats["a"]
-    )
+    # team_stats["kda"] = np.where(
+    #     team_stats["d"] != 0,
+    #     (team_stats["k"] + team_stats["a"])/team_stats["d"],
+    #     team_stats["k"] + team_stats["a"]
+    # )
     
     # calculate FK/FD differential
     team_stats["fkfd_diff"] = team_stats["fk"] - team_stats["fd"]
@@ -110,16 +117,8 @@ def build_features_for_map(match_id, map_name):
     """
     features = pd.DataFrame()
     
-    # 1. Basic team stats (ACS, KDA, FK/FD) - YOU ALREADY HAVE THIS!
     team_stats = calculate_team_stats_for_map(player_stats_df, match_id, map_name)
 
-    # 2. Economy features
-    economy_map_data = economy_df[
-        (economy_df["match_id"] == match_id) &
-        (economy_df["map"] == map_name)
-    ]
-
-    economy_features = economy_map_data.set_index('Team')[['eco_won', 'semi_eco_won']]
     performance_map_data = performance_df[
         (performance_df["Match ID"] == match_id) &
         (performance_df["Map"] == map_name)
@@ -136,29 +135,28 @@ def build_features_for_map(match_id, map_name):
     clutch_features = performance_map_data.groupby("Team")["individual_clutch_score"].sum()
 
     features = team_stats.copy()
-    features = features.join(economy_features, how='left')
-    features = features.join(clutch_features.rename('clutch_score'), how='left')
+    features = features.join(clutch_features.rename("clutch_score"), how="left")
     
     # 4. Get the actual winner (our TARGET variable!)
     winner = maps_df[
-        (maps_df['match_id'] == match_id) & 
-        (maps_df['map_name'] == map_name)
-    ]['winner'].values[0]
+        (maps_df["match_id"] == match_id) & 
+        (maps_df["map_name"] == map_name)
+    ]["winner"].values[0]
     
-    features['won'] = features.index == winner
-    features['won'] = features['won'].astype(int)
+    features["won"] = features.index == winner
+    features["won"] = features["won"].astype(int)
     return features
 
 # Test on one map
-test_features = build_features_for_map(542195, 'Bind')
+test_features = build_features_for_map(542195, "Bind")
 print(test_features)
 
 # test on all maps
 all_features = []
 
 for idx, row in maps_df.iterrows():
-    match_id = row['match_id']
-    map_name = row['map_name']
+    match_id = row["match_id"]
+    map_name = row["map_name"]
     
     try:
         features = build_features_for_map(match_id, map_name)
@@ -171,8 +169,52 @@ for idx, row in maps_df.iterrows():
 full_dataset = pd.concat(all_features, ignore_index=False)
 
 # save csv
-full_dataset.to_csv('training_data.csv', index=True)
+full_dataset.to_csv("training_data.csv", index=True)
 print("Saved to training_data.csv")
 
-print("Average stats for winners vs losers:")
-print(full_dataset.groupby('won')[['acs', 'kda', 'fkfd_diff', 'clutch_score']].mean())
+dataset = pd.read_csv("training_data.csv")
+print("Dataset shape:", dataset.shape)
+print("\nMissing values:")
+print(dataset.isnull().sum())
+
+
+
+# model training
+
+X = dataset.drop(columns=["won", "player_team"])
+y = dataset["won"]
+
+# train, test, validate split
+X_temp, X_test, y_temp, y_test = train_test_split(X, y, test_size=0.15, random_state=42, stratify=y)
+X_train, X_val, y_train, y_val = train_test_split(X_temp, y_temp, test_size=0.176, random_state=42, stratify=y_temp)
+
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_val_scaled = scaler.transform(X_val)
+X_test_scaled = scaler.transform(X_test)
+
+model = LogisticRegression(random_state=42)
+model.fit(X_train_scaled, y_train)
+
+y_train_pred = model.predict(X_train_scaled)
+y_val_pred = model.predict(X_val_scaled)
+
+train_accuracy = accuracy_score(y_train, y_train_pred)
+val_accuracy = accuracy_score(y_val, y_val_pred)
+
+print(f"🎯 Training Accuracy: {train_accuracy:.3f}")
+print(f"🎯 Validation Accuracy: {val_accuracy:.3f}")
+
+print("\n📊 Validation Set Performance:")
+print(classification_report(y_val, y_val_pred, target_names=['Loss', 'Win']))
+
+print("\n🔢 Confusion Matrix:")
+print(confusion_matrix(y_val, y_val_pred))
+
+feature_importance = pd.DataFrame({
+    'feature': X.columns,
+    'coefficient': model.coef_[0]
+}).sort_values('coefficient', ascending=False)
+
+print("\n📊 Feature Importance (Logistic Regression Coefficients):")
+print(feature_importance)
