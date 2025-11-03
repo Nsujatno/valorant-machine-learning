@@ -32,7 +32,6 @@ team_name_mapping = {
     "RRQ": "Rex Regum Qeon",
     "FNC": "FNATIC"
 }
-economy_df["Team"] = economy_df["Team"].map(team_name_mapping)
 performance_df["Team"] = performance_df["Team"].map(team_name_mapping)
 
 # Initial data exploration
@@ -176,45 +175,3 @@ dataset = pd.read_csv("training_data.csv")
 print("Dataset shape:", dataset.shape)
 print("\nMissing values:")
 print(dataset.isnull().sum())
-
-
-
-# model training
-
-X = dataset.drop(columns=["won", "player_team"])
-y = dataset["won"]
-
-# train, test, validate split
-X_temp, X_test, y_temp, y_test = train_test_split(X, y, test_size=0.15, random_state=42, stratify=y)
-X_train, X_val, y_train, y_val = train_test_split(X_temp, y_temp, test_size=0.176, random_state=42, stratify=y_temp)
-
-scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(X_train)
-X_val_scaled = scaler.transform(X_val)
-X_test_scaled = scaler.transform(X_test)
-
-model = LogisticRegression(random_state=42)
-model.fit(X_train_scaled, y_train)
-
-y_train_pred = model.predict(X_train_scaled)
-y_val_pred = model.predict(X_val_scaled)
-
-train_accuracy = accuracy_score(y_train, y_train_pred)
-val_accuracy = accuracy_score(y_val, y_val_pred)
-
-print(f"🎯 Training Accuracy: {train_accuracy:.3f}")
-print(f"🎯 Validation Accuracy: {val_accuracy:.3f}")
-
-print("\n📊 Validation Set Performance:")
-print(classification_report(y_val, y_val_pred, target_names=['Loss', 'Win']))
-
-print("\n🔢 Confusion Matrix:")
-print(confusion_matrix(y_val, y_val_pred))
-
-feature_importance = pd.DataFrame({
-    'feature': X.columns,
-    'coefficient': model.coef_[0]
-}).sort_values('coefficient', ascending=False)
-
-print("\n📊 Feature Importance (Logistic Regression Coefficients):")
-print(feature_importance)
