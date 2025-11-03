@@ -4,6 +4,7 @@ import re
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 maps_df = pd.read_csv("detailed_matches_maps.csv")
@@ -126,11 +127,22 @@ X_train_scaled = scaler.fit_transform(X_train)
 X_val_scaled = scaler.transform(X_val)
 X_test_scaled = scaler.transform(X_test)
 
+# logistic regression model
 lr_model = LogisticRegression(random_state=42, max_iter=1000)
 lr_model.fit(X_train_scaled, y_train)
 
 y_train_pred = lr_model.predict(X_train_scaled)
 y_val_pred = lr_model.predict(X_val_scaled)
+
+# train random forest model
+rf_model = RandomForestClassifier(
+    n_estimators=100,
+    max_depth=2,
+    random_state=42
+)
+rf_model.fit(X_train, y_train)
+y_rf_train_pred = rf_model.predict(X_train)
+y_rf_val_pred = rf_model.predict(X_val)
 
 print(f"Training Accuracy: {accuracy_score(y_train, y_train_pred):.2f}")
 print(f"Validation Accuracy: {accuracy_score(y_val, y_val_pred):.2f}")
@@ -146,3 +158,18 @@ feature_importance = pd.DataFrame({
 
 print("Feature Importance:")
 print(feature_importance)
+
+print(f"Random forest Training Accuracy: {accuracy_score(y_train, y_rf_train_pred):.2f}")
+print(f"Random forest Validation Accuracy: {accuracy_score(y_val, y_rf_val_pred):.2f}")
+
+print("Random forest Confusion Matrix (Validation):")
+print(confusion_matrix(y_val, y_rf_val_pred))
+
+# Feature importance
+rf_feature_importance = pd.DataFrame({
+    'feature': X.columns,
+    'importance': rf_model.feature_importances_
+}).sort_values('importance', ascending=False)
+
+print("Feature Importance:")
+print(rf_feature_importance)
